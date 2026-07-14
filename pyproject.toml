@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "selective-sitemapper"
+version = "0.1.0"
+description = "Selective Playwright crawler with LLM-assisted link classification"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "playwright==1.61.0",
+  "pydantic",
+  "pydantic-ai-slim[openai]",
+  "pydantic-settings",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy",
+  "pytest",
+  "pytest-asyncio",
+  "ruff",
+]
+
+[project.scripts]
+sitemapper = "sitemapper.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sitemapper"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+asyncio_mode = "auto"
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["llm: tests requiring a configured live language model"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [".verify-venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["sitemapper"]
+mypy_path = "src"
+plugins = ["pydantic.mypy"]
