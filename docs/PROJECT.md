@@ -49,3 +49,21 @@ pipeline without Chromium or an API key. Agent wiring uses Pydantic AI test mode
 baselines are marked `llm` and are opt-in.
 
 Do not install Chromium as part of ordinary unit-test setup. Install it only for real browser runs.
+
+## Planned runtime observability
+
+Long crawls currently print only their final summary. A running container therefore confirms that
+the process exists, but does not distinguish active work from a stalled browser or model request.
+A future implementation should add:
+
+- structured logs for each page and pipeline stage (`robots`, `render`, `extract`, `classify`,
+  `follow`, and `write`), including URL, BFS depth, candidate count, queue size, and stage duration;
+- elapsed-time progress after every completed page;
+- periodic heartbeat logs while a slow render or LLM request is in flight, including the current
+  stage and its elapsed time;
+- configurable hard timeouts for each classification request and the overall crawl, with clear
+  timeout errors and bounded retries;
+- incremental/checkpoint output so completed pages survive a later timeout or failure; and
+- Docker health reporting based on recent pipeline progress rather than merely process existence.
+
+Logs and health data must never include API keys, full prompts, or other secrets.
