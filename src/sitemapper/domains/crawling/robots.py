@@ -40,7 +40,7 @@ class RobotsTxtChecker:
         except HTTPError as exc:
             if exc.code in {401, 403, 429} or exc.code >= 500:
                 parser = RobotFileParser(robots_url)
-                parser.disallow_all = True
+                parser.parse(["User-agent: *", "Disallow: /"])
                 return parser
             return None
         except (URLError, TimeoutError, OSError):

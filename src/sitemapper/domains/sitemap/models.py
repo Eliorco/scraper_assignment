@@ -42,6 +42,10 @@ class PageNode(BaseModel):
     title: str = ""
     canonical_url: str | None = None
     headings: list[str] = Field(default_factory=list)
+    candidate_count: int = Field(default=0, ge=0)
+    classified_candidate_count: int = Field(default=0, ge=0)
+    dropped_candidate_count: int = Field(default=0, ge=0)
+    classification_partial: bool = False
     sections: list[ClassifiedSection] = Field(default_factory=list)
     links: list[ClassifiedLink] = Field(default_factory=list)
 
@@ -49,6 +53,7 @@ class PageNode(BaseModel):
 class SitemapConfig(BaseModel):
     max_depth: int = Field(default=2, ge=0)
     max_pages: int = Field(default=100, ge=1)
+    max_candidates_per_page: int = Field(default=400, ge=1)
     same_domain_only: bool = True
     respect_robots: bool = True
 

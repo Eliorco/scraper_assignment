@@ -9,8 +9,8 @@
 1. Check `robots.txt`, then render the URL through the `Renderer` protocol.
 2. Parse HTML into page metadata and `l{i}` link / `s{i}` section candidates.
 3. Add deterministic junk signals.
-4. Classify all candidates in one Pydantic AI call. This is the only non-deterministic stage;
-   the classifier receives extracted data and has no fetching tools.
+4. Classify up to the configured per-page candidate limit in one Pydantic AI call. This is the
+   only non-deterministic stage; the classifier receives extracted data and has no fetching tools.
 5. Apply depth, scope, canonical deduplication, robots, and page-budget constraints.
 6. Assemble validated sitemap models, write timestamped JSON, and print a summary.
 
@@ -30,9 +30,10 @@ both network-facing adapters with deterministic fakes.
 ## Configuration
 
 `Settings` reads environment variables with the `SCRAPER_` prefix. Defaults include depth `2`,
-100 pages, same-registrable-domain scope, robots enforcement, concurrency `3`, a one-second
-per-host delay, a 30-second navigation timeout, and model `openai:gpt-5`. `OPENAI_API_KEY` is read
-by the OpenAI provider. Generated data defaults to `output/`.
+100 pages, a 400-candidate per-page classification limit, same-registrable-domain scope, robots
+enforcement, concurrency `3`, a one-second per-host delay, a 30-second navigation timeout, and
+model `openai:gpt-5`. `OPENAI_API_KEY` is read by the OpenAI provider. Generated data defaults to
+`output/`.
 
 ## Output model
 
@@ -40,6 +41,26 @@ Each page records URL, depth, title, canonical URL, headings, sections, and link
 element includes meaningfulness, importance, reason, and confidence. Links additionally record
 whether they were followed and the deterministic follow reason. Top-level metadata captures the
 configuration, model, run ID, page count, duration, and UTC generation timestamp.
+
+## Oversized candidate batches
+
+The current testing safeguard caps each page at 400 classification candidates so a large homepage
+cannot invalidate the entire crawl by exceeding the model's structured-output capacity. Landmark
+sections are retained first, followed by links in extraction order; excess links are dropped and
+are neither classified nor followed.
+
+The affected page remains in the sitemap as a partial result. Its JSON records `candidate_count`,
+`classified_candidate_count`, `dropped_candidate_count`, and `classification_partial`. The runtime
+also emits a warning when truncation happens, and the final CLI summary reports how many candidates
+were dropped. Configure the limit with `SCRAPER_MAX_CANDIDATES_PER_PAGE` or
+`--max-candidates-per-page`.
+
+If the model still returns fewer verdicts than requested, the validated subset is retained and the
+missing candidates are dropped under the same partial-result behavior. Duplicate or unexpected
+candidate IDs remain hard errors because they cannot be matched safely.
+
+This cap is a temporary testing behavior. A production implementation should deduplicate repeated
+candidates and classify bounded chunks while preserving a complete page result.
 
 ## Testing
 

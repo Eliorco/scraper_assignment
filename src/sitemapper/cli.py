@@ -27,6 +27,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("url", nargs="?", help="HTTP(S) URL to crawl")
     parser.add_argument("--max-depth", type=int)
     parser.add_argument("--max-pages", type=int)
+    parser.add_argument("--max-candidates-per-page", type=int)
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--request-delay", type=float, dest="request_delay_s")
     parser.add_argument("--nav-timeout-ms", type=int)
@@ -70,6 +71,7 @@ async def _run(start_url: str, settings: Settings) -> Path:
         parser=parse,
         max_depth=settings.max_depth,
         max_pages=settings.max_pages,
+        max_candidates_per_page=settings.max_candidates_per_page,
         same_domain_only=settings.same_domain_only,
         respect_robots=settings.respect_robots,
     )
@@ -85,6 +87,7 @@ async def _run(start_url: str, settings: Settings) -> Path:
         config=SitemapConfig(
             max_depth=settings.max_depth,
             max_pages=settings.max_pages,
+            max_candidates_per_page=settings.max_candidates_per_page,
             same_domain_only=settings.same_domain_only,
             respect_robots=settings.respect_robots,
         ),

@@ -53,15 +53,11 @@ class SitemapClassifier:
         actual_ids = [item.target_id for item in items]
         if len(actual_ids) != len(set(actual_ids)):
             raise ValueError("Classifier returned duplicate candidate ids")
-        if set(actual_ids) != set(expected_ids):
-            missing = sorted(set(expected_ids) - set(actual_ids))
-            unexpected = sorted(set(actual_ids) - set(expected_ids))
-            raise ValueError(
-                f"Classifier returned an invalid candidate set; missing={missing}, "
-                f"unexpected={unexpected}"
-            )
+        unexpected = sorted(set(actual_ids) - set(expected_ids))
+        if unexpected:
+            raise ValueError(f"Classifier returned unexpected candidate ids: {unexpected}")
         by_id = {item.target_id: item for item in items}
-        return [by_id[target_id] for target_id in expected_ids]
+        return [by_id[target_id] for target_id in expected_ids if target_id in by_id]
 
 
 def _classification_prompt(page: PageContent) -> str:

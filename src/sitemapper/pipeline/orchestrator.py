@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import deque
 from collections.abc import Callable
 
@@ -20,6 +21,7 @@ from sitemapper.domains.sitemap.models import (
 from sitemapper.pipeline.follow_policy import decide
 
 Parser = Callable[[RenderedPage], PageContent]
+logger = logging.getLogger(__name__)
 
 
 class CrawlPipeline:
@@ -34,6 +36,7 @@ class CrawlPipeline:
         parser: Parser,
         max_depth: int = 2,
         max_pages: int = 100,
+        max_candidates_per_page: int = 400,
         same_domain_only: bool = True,
         respect_robots: bool = True,
     ) -> None:
@@ -41,12 +44,15 @@ class CrawlPipeline:
             raise ValueError("max_depth must be non-negative")
         if max_pages < 1:
             raise ValueError("max_pages must be at least 1")
+        if max_candidates_per_page < 1:
+            raise ValueError("max_candidates_per_page must be at least 1")
         self._renderer = renderer
         self._robots = robots
         self._classifier = classifier
         self._parser = parser
         self._max_depth = max_depth
         self._max_pages = max_pages
+        self._max_candidates_per_page = max_candidates_per_page
         self._same_domain_only = same_domain_only
         self._respect_robots = respect_robots
 
@@ -66,15 +72,48 @@ class CrawlPipeline:
 
             rendered = await self._renderer.render(target.url)
             page = annotate(self._parser(rendered))
-            classifications = await self._classifier.classify(page)
-            verdicts = _index_verdicts(page, classifications)
+            candidate_count = len(page.links) + len(page.sections)
+            classification_page = _limit_candidates(page, self._max_candidates_per_page)
+            batch_candidate_count = len(classification_page.links) + len(
+                classification_page.sections
+            )
+            limit_dropped_count = candidate_count - batch_candidate_count
+            if limit_dropped_count:
+                logger.warning(
+                    "Oversized candidate batch truncated; sitemap page contains partial results "
+                    "(total=%d, limit=%d, dropped=%d)",
+                    candidate_count,
+                    self._max_candidates_per_page,
+                    limit_dropped_count,
+                    extra={"stage": "classify", "url": page.url},
+                )
+
+            classifications = await self._classifier.classify(classification_page)
+            verdicts = _index_verdicts(classification_page, classifications)
+            classified_candidate_count = len(verdicts)
+            response_dropped_count = batch_candidate_count - classified_candidate_count
+            if response_dropped_count:
+                logger.warning(
+                    "Classifier returned an incomplete batch; missing candidates were dropped "
+                    "and the sitemap page contains partial results "
+                    "(requested=%d, returned=%d, dropped=%d)",
+                    batch_candidate_count,
+                    classified_candidate_count,
+                    response_dropped_count,
+                    extra={"stage": "classify", "url": page.url},
+                )
+            dropped_candidate_count = candidate_count - classified_candidate_count
 
             classified_sections = [
-                _classified_section(section, verdicts[section.id]) for section in page.sections
+                _classified_section(section, verdicts[section.id])
+                for section in classification_page.sections
+                if section.id in verdicts
             ]
             classified_links: list[ClassifiedLink] = []
 
-            for link in page.links:
+            for link in classification_page.links:
+                if link.id not in verdicts:
+                    continue
                 verdict = verdicts[link.id]
                 decision = decide(
                     link,
@@ -113,6 +152,10 @@ class CrawlPipeline:
                     title=page.title,
                     canonical_url=page.canonical_url,
                     headings=page.headings,
+                    candidate_count=candidate_count,
+                    classified_candidate_count=classified_candidate_count,
+                    dropped_candidate_count=dropped_candidate_count,
+                    classification_partial=bool(dropped_candidate_count),
                     sections=classified_sections,
                     links=classified_links,
                 )
@@ -121,21 +164,32 @@ class CrawlPipeline:
         return pages
 
 
+def _limit_candidates(page: PageContent, limit: int) -> PageContent:
+    """Return a classification view capped to ``limit`` candidates.
+
+    Landmark sections are retained first because they describe site structure; remaining
+    capacity is filled by links in deterministic extraction order.
+    """
+    sections = page.sections[:limit]
+    remaining = limit - len(sections)
+    links = page.links[:remaining]
+    return page.model_copy(update={"links": links, "sections": sections})
+
+
 def _index_verdicts(
     page: PageContent, classifications: list[Classification]
 ) -> dict[str, Classification]:
-    expected = {candidate.id for candidate in [*page.links, *page.sections]}
+    expected = {candidate.id for candidate in page.links} | {
+        candidate.id for candidate in page.sections
+    }
     indexed: dict[str, Classification] = {}
     for verdict in classifications:
         if verdict.target_id in indexed:
             raise ValueError(f"Duplicate classification for {verdict.target_id!r}")
         indexed[verdict.target_id] = verdict
-    if set(indexed) != expected:
-        missing = sorted(expected - set(indexed))
-        unexpected = sorted(set(indexed) - expected)
-        raise ValueError(
-            f"Classifier did not cover page candidates; missing={missing}, unexpected={unexpected}"
-        )
+    unexpected = sorted(set(indexed) - expected)
+    if unexpected:
+        raise ValueError(f"Classifier returned unexpected page candidates: {unexpected}")
     return indexed
 
 

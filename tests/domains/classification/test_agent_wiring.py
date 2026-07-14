@@ -54,6 +54,39 @@ async def test_classifier_returns_schema_valid_ordered_output_without_network() 
     }
 
 
+@pytest.mark.asyncio
+async def test_classifier_accepts_incomplete_structured_output_as_partial() -> None:
+    test_model = TestModel(
+        custom_output_args={
+            "items": [
+                {
+                    "target_id": "l1",
+                    "meaningful": False,
+                    "importance": "low",
+                    "reason": "Utility destination",
+                    "confidence": 0.9,
+                }
+            ]
+        }
+    )
+    classifier = SitemapClassifier(model=test_model)
+    page = PageContent(
+        url="https://example.com/",
+        links=[
+            LinkCandidate(
+                id=f"l{index}",
+                url=f"https://example.com/{index}",
+                normalized_url=f"https://example.com/{index}",
+            )
+            for index in range(2)
+        ],
+    )
+
+    verdicts = await classifier.classify(page)
+
+    assert [verdict.target_id for verdict in verdicts] == ["l1"]
+
+
 def test_non_fetching_tools_only_analyze_supplied_values() -> None:
     url_result = analyze_url_pattern("https://example.com/login?page=2", "Sign in")
     role_result = identify_section_role("footer", "Company links")

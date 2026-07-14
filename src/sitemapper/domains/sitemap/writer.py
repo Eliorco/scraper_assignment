@@ -6,7 +6,7 @@ from datetime import UTC
 from pathlib import Path
 
 from sitemapper.domains.extraction.url_tools import slugify_url
-from sitemapper.domains.sitemap.models import ClassifiedLink, Sitemap
+from sitemapper.domains.sitemap.models import ClassifiedLink, ClassifiedSection, Sitemap
 
 
 def output_path(sitemap: Sitemap, output_dir: Path) -> Path:
@@ -32,7 +32,10 @@ def write(sitemap: Sitemap, output_dir: Path | str = Path("output")) -> Path:
 def summary(sitemap: Sitemap, path: Path) -> str:
     """Build a concise summary suitable for CLI stdout."""
 
-    elements = [element for page in sitemap.pages for element in [*page.links, *page.sections]]
+    elements: list[ClassifiedLink | ClassifiedSection] = []
+    for page in sitemap.pages:
+        elements.extend(page.links)
+        elements.extend(page.sections)
     meaningful = sum(element.meaningful for element in elements)
     top_links: list[ClassifiedLink] = sorted(
         (link for page in sitemap.pages for link in page.links if link.meaningful),
@@ -45,6 +48,14 @@ def summary(sitemap: Sitemap, path: Path) -> str:
         f"Pages visited: {sitemap.run.pages_visited}",
         f"Elements: {meaningful} meaningful, {len(elements) - meaningful} non-meaningful",
     ]
+    partial_pages = [page for page in sitemap.pages if page.classification_partial]
+    if partial_pages:
+        dropped = sum(page.dropped_candidate_count for page in partial_pages)
+        lines.append(
+            "WARNING: Partial results — "
+            f"{dropped} oversized candidates were dropped across {len(partial_pages)} page(s) "
+            f"(limit {sitemap.config.max_candidates_per_page} per page)."
+        )
     if top_links:
         lines.append("Top meaningful links:")
         lines.extend(

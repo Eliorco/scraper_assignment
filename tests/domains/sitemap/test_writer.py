@@ -60,3 +60,21 @@ def test_summary_reports_counts_and_output_path(tmp_path) -> None:
     assert "Pages visited: 1" in text
     assert "1 meaningful, 0 non-meaningful" in text
     assert str(path) in text
+
+
+def test_summary_warns_when_oversized_candidates_were_dropped(tmp_path) -> None:
+    sitemap = _sitemap()
+    sitemap.pages[0] = sitemap.pages[0].model_copy(
+        update={
+            "candidate_count": 450,
+            "classified_candidate_count": 400,
+            "dropped_candidate_count": 50,
+            "classification_partial": True,
+        }
+    )
+
+    text = summary(sitemap, tmp_path / "result.json")
+
+    assert "WARNING: Partial results" in text
+    assert "50 oversized candidates were dropped" in text
+    assert "limit 400 per page" in text
