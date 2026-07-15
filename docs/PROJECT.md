@@ -9,8 +9,9 @@
 1. Check `robots.txt`, then render the URL through the `Renderer` protocol.
 2. Parse HTML into page metadata and `l{i}` link / `s{i}` section candidates.
 3. Add deterministic junk signals.
-4. Classify up to the configured per-page candidate limit in one Pydantic AI call. This is the
-   only non-deterministic stage; the classifier receives extracted data and has no fetching tools.
+4. Split the configured per-page candidate set into bounded chunks and classify several chunks
+   concurrently with Pydantic AI. This is the only non-deterministic stage; the classifier receives
+   extracted data and has no fetching tools.
 5. Apply depth, scope, canonical deduplication, robots, and page-budget constraints.
 6. Assemble validated sitemap models, write timestamped JSON, and print a summary.
 
@@ -30,10 +31,10 @@ both network-facing adapters with deterministic fakes.
 ## Configuration
 
 `Settings` reads environment variables with the `SCRAPER_` prefix. Defaults include depth `2`,
-100 pages, a 400-candidate per-page classification limit, same-registrable-domain scope, robots
-enforcement, concurrency `3`, a one-second per-host delay, a 30-second navigation timeout, and
-model `openai:gpt-5`. `OPENAI_API_KEY` is read by the OpenAI provider. Generated data defaults to
-`output/`.
+100 pages, a 400-candidate per-page classification limit, 100 candidates per LLM request, four
+concurrent LLM requests, same-registrable-domain scope, robots enforcement, renderer concurrency
+`3`, a one-second per-host delay, a 30-second navigation timeout, and model `openai:gpt-5`.
+`OPENAI_API_KEY` is read by the OpenAI provider. Generated data defaults to `output/`.
 
 ## Output model
 
@@ -59,8 +60,14 @@ If the model still returns fewer verdicts than requested, the validated subset i
 missing candidates are dropped under the same partial-result behavior. Duplicate or unexpected
 candidate IDs remain hard errors because they cannot be matched safely.
 
-This cap is a temporary testing behavior. A production implementation should deduplicate repeated
-candidates and classify bounded chunks while preserving a complete page result.
+Within the page cap, `SitemapClassifier` uses batches of 100 candidates and runs up to four model
+requests concurrently. Successful batches are merged back into extraction order. If one request
+fails after retries, successful batches remain available as partial results; if every request
+fails, the classification error is raised. Configure this with `SCRAPER_CLASSIFICATION_BATCH_SIZE`
+and `SCRAPER_CLASSIFICATION_CONCURRENCY`, or the matching CLI flags.
+
+The page cap is a temporary testing behavior. A production implementation should also deduplicate
+repeated candidates and adapt batch/concurrency limits to provider rate limits.
 
 ## Testing
 

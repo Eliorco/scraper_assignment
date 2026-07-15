@@ -54,6 +54,8 @@ class SitemapConfig(BaseModel):
     max_depth: int = Field(default=2, ge=0)
     max_pages: int = Field(default=100, ge=1)
     max_candidates_per_page: int = Field(default=400, ge=1)
+    classification_batch_size: int = Field(default=100, ge=1)
+    classification_concurrency: int = Field(default=4, ge=1)
     same_domain_only: bool = True
     respect_robots: bool = True
 

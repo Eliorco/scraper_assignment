@@ -28,6 +28,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-depth", type=int)
     parser.add_argument("--max-pages", type=int)
     parser.add_argument("--max-candidates-per-page", type=int)
+    parser.add_argument("--classification-batch-size", type=int)
+    parser.add_argument("--classification-concurrency", type=int)
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--request-delay", type=float, dest="request_delay_s")
     parser.add_argument("--nav-timeout-ms", type=int)
@@ -67,7 +69,11 @@ async def _run(start_url: str, settings: Settings) -> Path:
     pipeline = CrawlPipeline(
         renderer=renderer,
         robots=RobotsTxtChecker(),
-        classifier=SitemapClassifier(model=settings.llm_model),
+        classifier=SitemapClassifier(
+            model=settings.llm_model,
+            batch_size=settings.classification_batch_size,
+            concurrency=settings.classification_concurrency,
+        ),
         parser=parse,
         max_depth=settings.max_depth,
         max_pages=settings.max_pages,
@@ -88,6 +94,8 @@ async def _run(start_url: str, settings: Settings) -> Path:
             max_depth=settings.max_depth,
             max_pages=settings.max_pages,
             max_candidates_per_page=settings.max_candidates_per_page,
+            classification_batch_size=settings.classification_batch_size,
+            classification_concurrency=settings.classification_concurrency,
             same_domain_only=settings.same_domain_only,
             respect_robots=settings.respect_robots,
         ),
